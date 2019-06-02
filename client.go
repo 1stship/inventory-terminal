@@ -59,7 +59,7 @@ func runClientMode(endpoint string) error {
 	errCh := make(chan bool)
 	setupClientDataChannel(peerConnection, errCh)
 	email := getInput("Input Soracom account email: ")
-	password := getInput("Input Soracom account password: ")
+	password := getPasswordInput("Input Soracom account password: ")
 	fmt.Print("SORACOM認証中...")
 	token, err := getSoracomToken(email, password)
 	if err != nil {
@@ -190,6 +190,21 @@ func getInput(inst string) string {
 	}
 }
 
+func getPasswordInput(inst string) string {
+	for {
+		fmt.Print(inst)
+		password, err := terminal.ReadPassword(int(syscall.Stdin))
+		if err != nil {
+			continue
+		} else {
+			if string(password) != "" {
+				fmt.Println("")
+				return string(password)
+			}
+		}
+	}
+}
+
 func requestHttp(method, url string, data interface{}, token *soracomToken) ([]byte, error) {
 	var req *http.Request
 	var err error
@@ -220,12 +235,17 @@ func requestHttp(method, url string, data interface{}, token *soracomToken) ([]b
 		return nil, errors.New("fail to access via http")
 	}
 	defer resp.Body.Close()
+
 	buf := make([]byte, 65536)
 	readLen, err := resp.Body.Read(buf)
-	if err.Error() != "EOF" {
+	if err != nil && err.Error() != "EOF" {
 		return nil, errors.New("fail to read http body")
 	}
-	return buf[:readLen], nil
+	if resp.StatusCode < 300 {
+		return buf[:readLen], nil
+	} else {
+		return nil, errors.New("fail to request API\n" + string(buf[:readLen]))
+	}
 }
 
 func getSoracomToken(email, password string) (*soracomToken, error) {
@@ -250,7 +270,7 @@ func getDevice(endpoint string, token *soracomToken) (*inventoryDevice, error) {
 	var devices []inventoryDevice
 	err = json.Unmarshal(buf, &devices)
 	if err != nil {
-		return nil, errors.New("dfail to parse devices")
+		return nil, errors.New("fail to parse devices")
 	}
 	for _, device := range devices {
 		if device.Endpoint == endpoint {
