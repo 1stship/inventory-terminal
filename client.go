@@ -96,6 +96,9 @@ func runClientMode(endpoint string) error {
 		return err
 	}
 
+	oldState, _ := terminal.MakeRaw((int)(os.Stdin.Fd()))
+	defer func() { _ = terminal.Restore(int(os.Stdin.Fd()), oldState) }()
+
 	trapSignals := []os.Signal{
 		syscall.SIGINT,
 		syscall.SIGTERM,
@@ -116,7 +119,6 @@ func setupClientDataChannel(peerConnection *webrtc.PeerConnection, errCh chan bo
 		keepAliveCh := make(chan bool)
 		finishCh := make(chan bool)
 		dataChannel.OnOpen(func() {
-			fmt.Println("inventory-terminal connected")
 
 			go func() {
 				t := time.NewTicker(5 * time.Second)
@@ -133,7 +135,7 @@ func setupClientDataChannel(peerConnection *webrtc.PeerConnection, errCh chan bo
 
 			go func() {
 				for {
-					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 					defer cancel()
 					select {
 					case <-ctx.Done():
@@ -143,9 +145,6 @@ func setupClientDataChannel(peerConnection *webrtc.PeerConnection, errCh chan bo
 					}
 				}
 			}()
-
-			oldState, _ := terminal.MakeRaw((int)(os.Stdin.Fd()))
-			defer func() { _ = terminal.Restore(int(os.Stdin.Fd()), oldState) }()
 
 			buf := make([]byte, 1024)
 			for {
@@ -166,6 +165,10 @@ func setupClientDataChannel(peerConnection *webrtc.PeerConnection, errCh chan bo
 		})
 		dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
 			if msg.IsString {
+				if string(msg.Data) == "terminate" {
+					finishCh <- true
+					errCh <- true
+				}
 				keepAliveCh <- true
 			} else {
 				out := bufio.NewWriter(os.Stdout)

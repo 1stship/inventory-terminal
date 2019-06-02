@@ -50,6 +50,5 @@ inventory-terminal --endpoint <任意のエンドポイント名>
 
 ## TODO
 
-- 終了通知
 - アクセスID、アクセスキー認証およびSAMユーザー認証の対応
 - Goのパッケージ管理

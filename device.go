@@ -119,7 +119,7 @@ func setupDeviceDataChannel(peerConnection *webrtc.PeerConnection, errCh chan bo
 
 		go func() {
 			for {
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
 				select {
 				case <-ctx.Done():
@@ -138,6 +138,10 @@ func setupDeviceDataChannel(peerConnection *webrtc.PeerConnection, errCh chan bo
 				if err == io.EOF {
 					continue
 				}
+				dataChannel.SendText("terminate")
+
+				// terminateが届くまでの間にプロセスが終了しないように一定時間待つ
+				time.Sleep(5 * time.Second)
 				return
 			} else {
 				err = dataChannel.Send(buf[:readLen])
