@@ -34,8 +34,9 @@ func runDeviceMode(rootDir string) error {
 	if err != nil {
 		return err
 	}
+	openCh := make(chan bool)
 	errCh := make(chan bool)
-	err = setupDeviceDataChannel(peerConnection, errCh)
+	err = setupDeviceDataChannel(peerConnection, openCh, errCh)
 	if err != nil {
 		return err
 	}
@@ -50,6 +51,14 @@ func runDeviceMode(rootDir string) error {
 	err = recvAnswer(peerConnection, rootDir)
 	if err != nil {
 		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	select {
+	case <-ctx.Done():
+		return errors.New("timeout wait open webRTC data channel")
+	case <-openCh:
 	}
 
 	trapSignals := []os.Signal{
@@ -82,7 +91,7 @@ func clearWebrtcResources(rootDir string) error {
 	return nil
 }
 
-func setupDeviceDataChannel(peerConnection *webrtc.PeerConnection, errCh chan bool) error {
+func setupDeviceDataChannel(peerConnection *webrtc.PeerConnection, openCh, errCh chan bool) error {
 	dataChannel, err := peerConnection.CreateDataChannel("data", nil)
 	if err != nil {
 		return errors.New("fail to create data channel")
@@ -92,7 +101,7 @@ func setupDeviceDataChannel(peerConnection *webrtc.PeerConnection, errCh chan bo
 	finishCh := make(chan bool)
 
 	dataChannel.OnOpen(func() {
-		fmt.Println("inventory-terminal connected")
+		openCh <- true
 		cmd := exec.Command("/bin/bash", "-l")
 		shell.ptmx, _ = pty.Start(cmd)
 		shell.state, _ = terminal.MakeRaw(int(os.Stdin.Fd()))

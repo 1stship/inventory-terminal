@@ -56,10 +56,12 @@ func runClientMode(endpoint string) error {
 	if err != nil {
 		return err
 	}
+	openCh := make(chan bool)
 	errCh := make(chan bool)
-	setupClientDataChannel(peerConnection, errCh)
+	setupClientDataChannel(peerConnection, openCh, errCh)
 	email := getInput("Input Soracom account email: ")
 	password := getPasswordInput("Input Soracom account password: ")
+
 	fmt.Print("SORACOM認証中...")
 	token, err := getSoracomToken(email, password)
 	if err != nil {
@@ -96,6 +98,14 @@ func runClientMode(endpoint string) error {
 		return err
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	select {
+	case <-ctx.Done():
+		return errors.New("timeout wait open webRTC data channel")
+	case <-openCh:
+	}
+
 	oldState, _ := terminal.MakeRaw((int)(os.Stdin.Fd()))
 	defer func() { _ = terminal.Restore(int(os.Stdin.Fd()), oldState) }()
 
@@ -114,12 +124,13 @@ func runClientMode(endpoint string) error {
 
 }
 
-func setupClientDataChannel(peerConnection *webrtc.PeerConnection, errCh chan bool) {
+func setupClientDataChannel(peerConnection *webrtc.PeerConnection, openCh, errCh chan bool) {
 	peerConnection.OnDataChannel(func(dataChannel *webrtc.DataChannel) {
 		keepAliveCh := make(chan bool)
 		finishCh := make(chan bool)
 		dataChannel.OnOpen(func() {
 
+			openCh <- true
 			go func() {
 				t := time.NewTicker(5 * time.Second)
 				defer t.Stop()
